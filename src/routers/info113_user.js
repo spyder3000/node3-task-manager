@@ -1,10 +1,12 @@
 const express = require('express'); 
-const multer = require('multer'); 
-const sharp = require('sharp'); 
 const User = require('../models/user')
 const auth = require('../middleware/auth')  // add authentication middleware
-const { sendWelcomeEmail, sendCancelEmail } = require('../emails/account')   // destructuring to grab just these 2 functions from export
 const router = new express.Router();   /* create a Router */
+
+/*router.get('/test', (req, res) => {
+    res.send('This is from my other router from new file'); 
+})*/
+//app.use(router);  // register our new router w/ our existing express app 
 
 /*  Send POST data via HTTP Request (from Postman) -- e.g. localhost:3000/users;  clicking Send on Postman w/ valid 'body' data 
         will trigger this to run;  returns json data on Postman;  data save to db as found on Robo 3T */ 
@@ -13,13 +15,24 @@ router.post('/users', async (req,res) => {   // modified to async - this will no
     const user = new User(req.body); 
     try {
         await user.save();      // must save user prior to generateAuthToken?? 
-        sendWelcomeEmail(user.email, user.name); 
         const token = await user.generateAuthToken()  // get Token;  uses user instance (specific user) instead of User model
         res.status(201).send({user, token});    // return user object & token string
     } catch(e) {
         res.status(400).send(e); 
     }
 });     
+
+/*  Send POST data via HTTP Request (from Postman) -- e.g. localhost:3000/users;  clicking Send on Postman w/ valid 'body' data 
+        will trigger this to run;  returns json data on Postman;  data save to db as found on Robo 3T */
+/* app.post('/users', (req,res) => {
+    user.save().then(() => {
+        res.status(201);   // 201 is Created;  200 is OK 
+        res.send(user)
+    }).catch((e) => {     //  e.g. if pwd is too short;  default would still return status code of 200; see https://httpstatuses.com/  
+        res.status(400);  // bad request;  
+        res.send(e)
+    });  
+})  */
 
 /* Find a user that matches the email/pwd provided */
 router.post('/users/login', async (req, res) => {
@@ -82,9 +95,24 @@ router.get('/users/me', auth, async (req, res) => {
     res.send(req.user);  // because auth returns req.user, we can simply send that 
 }); 
 
-/* Async -- patch to update an existing resource;  note this logic replaces call to /users/:id logic backed up in info113_user.js */
-//   auth middleware (parameter 2) will authenticate token & allow access to req.user  
-router.patch('/users/me', auth, async (req, res) => {
+/*  Async -- Send GET data via HTTP request to get ONE users (e.g. from Postman) using route parameters (:id) -- e.g. localhost:3000/users/98sxx...;  */
+/* REMOVED [ch 113] -- should not be allowed to get other users by id */
+/*router.get('/users/:id', async (req, res) => {
+    const _id = req.params.id;  
+    //console.log(req.params); 
+    try {
+        const user = await User.findById(_id); 
+        if (!user) {
+            return res.status(404).send();   // 404 is Record Not Found (id not found);  
+        }
+        res.send(user); 
+    } catch(e) {
+        res.status(500).send(e); 
+    }
+})*/
+
+/* Async -- patch to update an existing resource */
+router.patch('/users/:id', async (req, res) => {
     // Return error to User if update is to fields that are not allowed 
     const updates = Object.keys(req.body);   // return an array of strings that are properties 
     const allowedUpdate = ['name', 'email', 'password', 'age']    // array of properties the user is allowed to update 
@@ -93,80 +121,47 @@ router.patch('/users/me', auth, async (req, res) => {
     })
     if (!isValidOperation) return res.status(400).send( {error: 'Invalid updates!!'}); 
 
-    try {   // removed User.findById logic, will use req.user instead
+    try {   // req.body is JSON that will have field/vals to update (e.g. name), 'new' returns a new user so we'll have latest data, 
+            //   runValidators to ensure the updated data is in format we're expecting     
+        //const user = await User.findByIdAndUpdate(req.params.id, req.body, { new: true, runValidators: true });  
+
+        /* Logic here replaces User.findByIdAndUpdate in line above;  this logic executed so we can utilize middleware in \src\models\user.js */
+        const user = await User.findById(req.params.id); 
         // iterate over updates array to make updates 
         updates.forEach((update) => {   // updates is array of strings, so update is a string
-            req.user[update] = req.body[update];  // dynamic -- will pull property value from 'update'
+            user[update] = req.body[update];  // dynamic -- will pull property value from 'update'
         })
-        await req.user.save();  // this is where middleware is executed;  
-        res.send(req.user);   // sends back the updated user data (because runValidators option set to true) 
+        await user.save();  // this is where middleware is executed;  
+
+        // this logic only fires if !user AND the :id has the exact same number of digits expected;  - drops to catch logic otherwise
+        if (!user) {
+            return res.status(404).send();   // 404 is Record Not Found (id not found);  
+        }
+        res.send(user);   // sends back the updated user data (because runValidators option set to true) 
     } catch (e) {
         res.status(400).send(e);  // validation failed
+        //res.status(500).send(e); 
     }
 })
 
 /* HTTP Delete for Users */  
-// logic for router.delete('/users/:id', auth, async (req, res) => {   moved to info113_user.js 
+// modify to not use :id param, instead use _id for curr user;  want to prevent delete of other peoples recs 
+//router.delete('/users/:id', auth, async (req, res) => {   
 router.delete('/users/me', auth, async (req, res) => {  
     try {
-        await req.user.remove();  
-        sendCancelEmail(req.user.email, req.user.name); 
-        res.send(req.user); 
+        // const user = await User.findByIdAndDelete(req.params.id);   // commented with removal of :id
+        //j  const user = await User.findByIdAndDelete(req.user._id);  // auth middleware gives us access to req.user data including _id  
+        // this logic only fires if !user AND the :id has the exact same number of digits expected;  - drops to catch logic otherwise
+        /*if (!user) {
+            return res.status(404).send();   // 404 is Record Not Found (id not found);  
+        }*/
+        await req.user.remove();  // use in place of User.findbyIdAndDelete as .find part is unneeded & we already have req.user from 'auth'
+        res.send(req.user); // (user)
     } catch (e) {
         res.status(500).send(e); 
     }
 }); 
 
-// configure multer - specify what type of files (e.g. pdf only OR images only);  dest is the directory to store the images;
-const upload = multer({     
-    //dest: 'avatars',  // commenting this prevents uploads from saving to this dir;  is available w/in router.post callback fn instead (below)
-    limits: {
-        fileSize: 1000000   // max file size in bytes;  1000000 = 1MB
-    }, 
-    // this function gets called internally by multers;  has 3 args (request, info about file, callback)
-    fileFilter(req, file, cb) {     // file param info at API section of www.npmjs.com/package/multer
-        if (!file.originalname.match(/\.(jpg|jpeg|png)$/) )  {    // reg expression as tested on regex101.com 
-            return cb(new Error('File must be a .png, .jpg, or .jpeg file'));  
-        }
-        cb(null, true);  // 1st arg is null if nothing went wrong;  true means upload is expected
-    }              
-})
 
-// download sample files for this from links.mead.io/files
-// e.g. localhost:3000/users/me/avatar  -- endpoint for client to upload a profile pic 
-/* upload.single() is the multer middleware;  2nd param is middleware, 3rd is route handler;  4th is error handler;  
-        'avatar' is just a string that will match the 'key' value in Body on Postman;  will save to /avatar dir specified above */
-router.post('/users/me/avatar', auth, upload.single('avatar'), async (req,res) => {   // a new endpoint where the client can upload these files 
-    // req.file.buffer contains a buffer of all the binary data for this file (accessible only if dest: is not specified above)
-    // sharp is async, so use await;  final value needs to be a buffer, so .toBuffer();  .png() converts to png
-    const buffer = await sharp(req.file.buffer).resize({width: 250, height: 250}).png().toBuffer()   
-    req.user.avatar = buffer   
-    await req.user.save()  // save this change to capture avatar;  store to req.user the file information (avatar) from upload 
-    res.send(); 
-}, (error, req, res, next) => {  // added this function at end for errors;  4 params in this seq lets express know this is a function for unhandled errors 
-    res.status(400).send({error: error.message});    // e.g. error.message from new Error fileFilter
-})  
-
-router.delete('/users/me/avatar', auth, upload.single('avatar'), async (req,res) => {   // a new endpoint where the client can delete an avatar 
-    req.user.avatar = undefined   // set to undefined to remove avatar from req.user
-    await req.user.save()  // save this change to capture avatar
-    res.send(); 
-}, (error, req, res, next) => {  // added this function at end for errors;  4 params in this seq lets express know this is a function for unhandled errors 
-    res.status(400).send({error: error.message});    // e.g. error.message from new Error fileFilter
-}) 
-
-router.get('/users/:id/avatar', async (req, res) => {
-    try {
-        const user = await User.findById(req.params.id)
-        if (!user || !user.avatar) {
-            throw new Error()   // will immediately jump to catch 
-        }
-        // normally we don't have to set this, as it defaults to application/json 
-        res.set('Content-Type', 'image/jpg');    // name of response header to set, value of response header
-        res.send(user.avatar); 
-    } catch (e) {
-        res.status(404).send()
-    }
-})
 
 module.exports = router;  

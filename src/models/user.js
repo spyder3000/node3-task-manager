@@ -2,6 +2,7 @@ const mongoose = require('mongoose');
 const validator = require('validator');  
 const bcrypt = require('bcryptjs'); 
 const jwt = require('jsonwebtoken'); 
+const Task = require('./task'); 
 
 const userSchema = new mongoose.Schema({
     name: {
@@ -49,13 +50,40 @@ const userSchema = new mongoose.Schema({
             type: String, 
             required: true
         }
-    }] 
+    }], 
+    avatar: {
+        type: Buffer
+    } 
+}, {
+    timestamps: true
 })
+
+/* setup a Virtual Attribute - not stored on User document;  just allows mongoose to relate Tasks to a User */
+userSchema.virtual('tasks', {
+    ref: 'Task', 
+    localField: '_id',     // field on this collection that will relate to the foreignField (_id & owner will be matched)
+    foreignField: 'owner'    // name of the field on the Task that's going to create this relationship
+})
+
+/* option 1 -- getPublicProfile is a specific method we created that can be called to strip out pwd & tokens array */
+//userSchema.methods.getPublicProfile = function () {  // note:  using this var, so don't use arrow functions 
+
+/* option 2 -- .toJSON will overwrite internal function which executes when express processes objects;  so without being called, this 
+                    method will strip out pwd & tokens array for user for all express calls */
+userSchema.methods.toJSON = function () {  // not explicitly called
+    const user = this       
+    // note that doing deletes on user directly does not work??? -- needs to be converted to simple object first 
+    const userObject = user.toObject()   // gets a raw object with our user data attached;  will remove mongoose stuff currently attached to user 
+    delete userObject.password;   //remove password from user
+    delete userObject.tokens;       // remove tokens array from user
+    delete userObject.avatar;       // remove avatar from user profile response;  avatar can be got via _id
+    return userObject; 
+}
 
 /*   statics methods are accessible on the model;  methods methods are accessible on the instance */
 userSchema.methods.generateAuthToken = async function () {
     const user = this;    // access the specific user for this instance
-    const token = jwt.sign({_id: user._id.toString()}, 'secret333token')   // toString() because user._id is an object id 
+    const token = jwt.sign({_id: user._id.toString()}, process.env.JWT_SECRET)   // toString() because user._id is an object id;  same secret as auth.js 
     user.tokens = user.tokens.concat({ token: token })   // saving token to user 
     await user.save();  
     return token; 
@@ -88,6 +116,13 @@ userSchema.pre('save', async function (next) {  // runs some code before user is
     next();  // next() needs to be called or this will spin in place forever
 })
 
-const User = mongoose.model('User', userSchema)
+// middleware that Deletes User Tasks when User is removed 
+userSchema.pre('remove', async function (next) {
+    const user = this; 
+    await Task.deleteMany({ owner: user._id })    // mongoose function to be used on Task model
+    next(); 
+})
+
+const User = mongoose.model('User', userSchema) 
 
 module.exports = User; 
