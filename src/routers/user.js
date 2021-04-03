@@ -24,14 +24,20 @@ router.post('/users', async (req,res) => {   // modified to async - this will no
 /* Find a user that matches the email/pwd provided */
 router.post('/users/login', async (req, res) => {
     try {       /* function found in models\user.js */
-        console.log(req.body.email, req.body.password )
+ //       console.log(req.body.email, req.body.password )
+        console.log('user/login'); 
+        console.log(req.method); 
+        //console.log(req.body.email);
+//        console.log(req.body);  
         const user = await User.findByCredentials(req.body.email, req.body.password);   // both params will be provided by body of request
         const token = await user.generateAuthToken()  // get Token;  uses user instance (specific user) instead of User model
+        // res.send({ user: user.getPublicProfile(), token});  // ch 112 -- fn to strip out password & tokens array
         res.send({user: user, token});   // shorthand syntax to send user: user, token: token;  data sent will be user object (w/ email, name, age, etc)
                                     //  and also a token string [can see via login in Postman]
         // new function on model/users to return just the public data we should expose about user (will not include pwd or tokens array)                             
         //res.send({user: user.getPublicProfile(), token});  // uses new method on models\user.js to strip out pwd & tokens array                            
     } catch (e) {
+        console.log('Login Attempt Fail??')  // e.g. error from User.findByCredentials;  
         res.status(400).send(); 
     }
 })
@@ -40,7 +46,7 @@ router.post('/users/login', async (req, res) => {
 /* URL -- https://mongoosejs.com/docs/queries.html - e.g. for Model.find(), Model.updateMany(), Model.deleteOne(), etc */
 /*  Async -- Send GET data via HTTP request to get all users (e.g. from Postman) -- e.g. localhost:3000/users/  */
 /*    note:  added 'auth' as 2nd param to execute the auth middleware prior running the async function -- only called if next() is executed */
-//  COMMENTED as this has no purpose in final version -- no need for user to get all other users // 
+//  COMMENTED (ch 109) as this has no purpose in final version -- no need for user to get all other users // 
 /*router.get('/users', auth, async (req, res) => {
     try {
         const users = await User.find({})   // User.find() returns promise 
@@ -76,13 +82,13 @@ router.post('/users/logoutAll', auth, async (req, res) => {
     }
 })
 
-/*  Async -- Send GET data via HTTP request to get curr User Profile (e.g. from Postman) -- e.g. localhost:3000/users/  */
+/*  ch 109 - Async -- Send GET data via HTTP request to get curr User Profile (e.g. from Postman) -- e.g. localhost:3000/users/  */
 /*    note:  added 'auth' as 2nd param to execute the auth middleware prior running the async function -- only called if next() is executed */
 router.get('/users/me', auth, async (req, res) => {
     res.send(req.user);  // because auth returns req.user, we can simply send that 
 }); 
 
-/* Async -- patch to update an existing resource;  note this logic replaces call to /users/:id logic backed up in info113_user.js */
+/* ch 113 - Async -- patch to update an existing resource;  note this logic replaces call to /users/:id logic backed up in info113_user.js */
 //   auth middleware (parameter 2) will authenticate token & allow access to req.user  
 router.patch('/users/me', auth, async (req, res) => {
     // Return error to User if update is to fields that are not allowed 
@@ -93,7 +99,7 @@ router.patch('/users/me', auth, async (req, res) => {
     })
     if (!isValidOperation) return res.status(400).send( {error: 'Invalid updates!!'}); 
 
-    try {   // removed User.findById logic, will use req.user instead
+    try {   // removed const user = await User.findById logic, will use req.user instead
         // iterate over updates array to make updates 
         updates.forEach((update) => {   // updates is array of strings, so update is a string
             req.user[update] = req.body[update];  // dynamic -- will pull property value from 'update'
@@ -105,7 +111,7 @@ router.patch('/users/me', auth, async (req, res) => {
     }
 })
 
-/* HTTP Delete for Users */  
+/* ch 113 - HTTP Delete for Users */  
 // logic for router.delete('/users/:id', auth, async (req, res) => {   moved to info113_user.js 
 router.delete('/users/me', auth, async (req, res) => {  
     try {
@@ -117,9 +123,9 @@ router.delete('/users/me', auth, async (req, res) => {
     }
 }); 
 
-// configure multer - specify what type of files (e.g. pdf only OR images only);  dest is the directory to store the images;
+// ch 123, 125 - configure multer - specify what type of files (e.g. pdf only OR images only);  dest is the directory to store the images;
 const upload = multer({     
-    //dest: 'avatars',  // commenting this prevents uploads from saving to this dir;  is available w/in router.post callback fn instead (below)
+    //dest: 'avatars',  // ch 127 - commenting this prevents uploads from saving to this dir;  is available w/in router.post callback fn instead (below)
     limits: {
         fileSize: 1000000   // max file size in bytes;  1000000 = 1MB
     }, 
@@ -132,18 +138,28 @@ const upload = multer({
     }              
 })
 
-// download sample files for this from links.mead.io/files
+// ch 123 - download sample files for this from links.mead.io/files
 // e.g. localhost:3000/users/me/avatar  -- endpoint for client to upload a profile pic 
-/* upload.single() is the multer middleware;  2nd param is middleware, 3rd is route handler;  4th is error handler;  
-        'avatar' is just a string that will match the 'key' value in Body on Postman;  will save to /avatar dir specified above */
-router.post('/users/me/avatar', auth, upload.single('avatar'), async (req,res) => {   // a new endpoint where the client can upload these files 
-    // req.file.buffer contains a buffer of all the binary data for this file (accessible only if dest: is not specified above)
+
+// ch 126 -- basic middleware for custom errors
+// 'avatar' matches key from Postman (or wherever);  will store in 'avatars' folder as specified in dest above  
+/*router.post('/users/me/avatar', upload.single('avatar'), async (req,res) => {   
+    res.send(); 
+}, (error, req, res, next) => {  // ch 126 - added this fn at end for errors;  4 params in this seq lets express know this is a fn for unhandled errors 
+    res.status(400).send({error: error.message});    // e.g. error.message from new Error fileFilter above
+})*/  
+
+/* upload.single() is the multer middleware;  
+    1st param is route, 2nd param is auth middleware, 3rd is upload specification, 4th is success, 5hh is error handler;  
+        'avatar' is just a string that will match the 'key' value in Body on Postman;   */
+router.post('/users/me/avatar', auth, upload.single('avatar'), async (req,res) => {    
+    // ch 127 - req.file.buffer contains a buffer of all the binary data for this file (accessible only if dest: is not specified above)
     // sharp is async, so use await;  final value needs to be a buffer, so .toBuffer();  .png() converts to png
     const buffer = await sharp(req.file.buffer).resize({width: 250, height: 250}).png().toBuffer()   
     req.user.avatar = buffer   
     await req.user.save()  // save this change to capture avatar;  store to req.user the file information (avatar) from upload 
     res.send(); 
-}, (error, req, res, next) => {  // added this function at end for errors;  4 params in this seq lets express know this is a function for unhandled errors 
+}, (error, req, res, next) => {  // ch 126 - added this fn at end for errors;  4 params in this seq lets express know this is a fn for unhandled errors 
     res.status(400).send({error: error.message});    // e.g. error.message from new Error fileFilter
 })  
 
@@ -155,14 +171,15 @@ router.delete('/users/me/avatar', auth, upload.single('avatar'), async (req,res)
     res.status(400).send({error: error.message});    // e.g. error.message from new Error fileFilter
 }) 
 
-router.get('/users/:id/avatar', async (req, res) => {
+// ch 128 -- Serving up Files 
+router.get('/users/:id/avatar', async (req, res) => {  // async because await below
     try {
         const user = await User.findById(req.params.id)
         if (!user || !user.avatar) {
-            throw new Error()   // will immediately jump to catch 
+            throw new Error()   // will immediately jump to catch (no user, no user avatar)
         }
-        // normally we don't have to set this, as it defaults to application/json 
-        res.set('Content-Type', 'image/jpg');    // name of response header to set, value of response header
+        // normally we don't have to set this, as it defaults to application/json;  tells user what type of data they're getting 
+        res.set('Content-Type', 'image/png');    // name of response header to set, value of response header
         res.send(user.avatar); 
     } catch (e) {
         res.status(404).send()

@@ -1,14 +1,20 @@
 const sgMail = require('@sendgrid/mail')
 
-sgMail.setApiKey(process.env.SENDGRID_API_KEY)   // key found in .env file 
+// ch 131 
+// const sendgridAPIKey = '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'; 
+// sgMail.setApiKey(sendgridAPIKey); 
 
+sgMail.setApiKey(process.env.SENDGRID_API_KEY)   // ch 133 - key found in .env file;  tells sendgrid which API key to use 
+
+// ch 132 -- Welcome & Cancel Emails 
 const sendWelcomeEmail = (email, name) => {
-    sgMail.send({   // .send returns a Promise, so we can use async/await
+    // allows us to send an email;  object includes all relevant data for email
+    sgMail.send({   // .send returns a Promise, so we can use async/await, but no need to wait for email to be sent
         to: email, 
         from: 'jvardy3000@gmail.com',   // will eventually want to get a custom domain email instead of this
         subject: 'Welcome to the App', 
         text: `Welcome to the app, ${name}.  Please let us know how you are enjoying the app.`
-        //html: ''   // to include an image or more styling;  
+        //html: ''   // to include an image or more styling along with text;  
     })
 }
 
@@ -22,6 +28,7 @@ const sendCancelEmail = (email, name) => {
     })
 }
 
+// ch 131 -- SEndGrid 
 /*sgMail.send({
     to: 'jvardy3000@gmail.com', 
     from: 'jvardy3000@gmail.com', 

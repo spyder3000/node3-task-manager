@@ -9,7 +9,7 @@ const router = new express.Router();   /* create a Router */
 router.post('/tasks', auth, async (req,res) => {   // these were app.post calls when this was in index.js 
     //const task = new Task(req.body); 
     const task = new Task({
-        ...req.body,   // spread operator to copy all properties from req.body
+        ...req.body,   // spread operator to copy all properties from req.body of task to be created
         owner: req.user._id   // the user we just authenticated;  add owner property to returned data
     })
     try {
@@ -33,12 +33,13 @@ router.post('/tasks', auth, async (req,res) => {   // these were app.post calls 
 /* URL -- https://mongoosejs.com/docs/queries.html - e.g. for Model.find(), Model.updateMany(), Model.deleteOne(), etc */
 
 /*  Async -- Send GET data via HTTP request to get all tasks (e.g. from Postman)  */
-// e.g. localhost:3000/tasks?completed=false;  localhost:3000/tasks?limit=2&skip=1    // e.g. skip is # of documents to skip 
+// e.g. localhost:3000/tasks?completed=false;  
+// e.g. localhost:3000/tasks?limit=2&skip=1    // e.g. skip is # of documents to skip 
 // e.g. localhost:3000/tasks?sortBy=createdAt:desc  
 router.get('/tasks', auth, async (req, res) => {
     const match = {}
     const sort = {}
-    if (req.query.completed) {      // req.query.completed will be the parameter string 'true' or 'false'
+    if (req.query.completed) {      // ch 119 -- req.query.completed will be the parameter string 'true' or 'false'
         match.completed = req.query.completed === 'true'  // will be set to 0 or 1
     }
     if (req.query.sortBy) {
@@ -47,8 +48,14 @@ router.get('/tasks', auth, async (req, res) => {
     }
     try {
         // const tasks = await Task.find({});  // Task.find() returns promise;  returns all tasks of all owners
+
+// ch 115 -- Task.find OR await req.user.populate('tasks') -- both will work to populate tasks 
 //        const tasks = await Task.find({ owner: req.user._id});  // returns just the tasks for a specific owner
 //        res.send(tasks); 
+//  OR 
+//      await req.user.populate('tasks').execPopulate() 
+//      res.send(req.user.tasks); 
+        // ch 119 - expand populate to include an object w/ key fields;  ch 120 -- limit & skip 
         await req.user.populate({
             path: 'tasks', 
             match,    // e.g. match: match,  

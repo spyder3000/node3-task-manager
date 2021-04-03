@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+
+<html>
+    <head>
+        <title>Task List</title>
+        <link rel="icon" href="/img/weather.png">
+        <link rel="stylesheet" href="/css/styles.css">  
+    </head>
+    <body>
+        <div class="main-content">
+            <header>
+                <h1>Task List </h1> <a id="login2" class="login" href="/login">Login</a> 
+                <p id="login" class="login">Login2</p>
+                <!---a href="/">Active</a>
+                <a href="/about">All</a>
+                <a href="/help">Help</a--->
+            </header>
+
+            <button class="active_only_btn">Active</button>
+            <button class="all_btn">All</button>
+            <br><br>
+
+            <div class="message">
+                <table><tr>
+                    <td class="completed_flag">*</td>
+                    <td class="created_date">07-28-2020</td> 
+                    <td class="task_text">Mow Grass</td>
+                </tr></table>
+            </div><br>
+
+            <form>
+                <input placeholder="Enter New Task">
+                <button>Add</button>
+            </form>
+            <p id="message-1"></p>
+            <p id="message-2"></p>
+        </div>
+       
+        <footer>
+            <p></p>
+        </footer>
+        <script src="/js/tasklist.js"></script>  <!--- moved to end so that this doesn't run until all our elements are available -->
+    </body>
+</html> 
